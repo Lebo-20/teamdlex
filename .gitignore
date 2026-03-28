@@ -1,0 +1,11 @@
+temp/
+__pycache__/
+*.pyc
+venv/
+.env
+*.mp4
+*.mkv
+*.srt
+*.wav
+*.m4a
+.vscode/

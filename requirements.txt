@@ -1,0 +1,15 @@
+python-telegram-bot
+git+https://github.com/m-bain/whisperX.git
+paddlepaddle
+paddleocr
+opencv-python
+numpy
+torch
+torchvision
+tqdm
+python-Levenshtein
+pydub
+scipy
+ffmpeg-python
+python-dotenv
+deep-translator
