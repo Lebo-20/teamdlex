@@ -140,24 +140,58 @@ class ProfessionalSubtitleSystem:
         if os.path.exists(audio_path): os.remove(audio_path)
         return orig_subs, trans_subs, lang
 
-    def split_by_words(self, words, max_chars=42, min_gap=0.5):
+    def split_by_words(self, words, max_chars=40, max_lines=2, min_gap=0.5, max_duration=6.0):
+        """
+        Logika pemotongan subtitle SUPER RAPI:
+        - Jika jeda > 0.5s -> Potong
+        - Jika durasi > 6.0s -> Potong (Agar tidak panjang)
+        - Jika ada tanda baca (., ?, !) -> Potong
+        """
         segments = []
-        current = []
-        for word in words:
-            start, end = word.get('start'), word.get('end')
-            if start is None: continue
+        current_chunk = []
+        chunk_start = None
+        
+        for i, word in enumerate(words):
+            w_text = word.get('word', '').strip()
+            w_start = word.get('start')
+            w_end = word.get('end')
             
-            if current:
-                if (start - current[-1].get('end', 0)) > min_gap:
-                    segments.append(current)
-                    current = []
+            if w_start is None or w_end is None: continue
+            if chunk_start is None: chunk_start = w_start
             
-            current.append(word)
-            text = " ".join([w.get('word', '') for w in current])
-            if len(text) > 80: # Max for 2 lines
-                segments.append(current)
-                current = []
-        if current: segments.append(current)
+            # --- Kondisi Pemotongan (Split) ---
+            should_split = False
+            
+            # 1. Cek Jeda (Gap > 0.5s)
+            if current_chunk:
+                prev_end = current_chunk[-1].get('end', 0)
+                if (w_start - prev_end) > min_gap: should_split = True
+            
+            # 2. Cek Durasi Maksimal (6 detik agar rapi)
+            if (w_end - chunk_start) > max_duration: should_split = True
+            
+            # 3. Cek Tanda Baca Akhir Kalimat di kata SEBELUMNYA
+            if current_chunk:
+                prev_text = current_chunk[-1].get('word', '')
+                if any(p in prev_text for p in [".", "?", "!", "。"]): should_split = True
+
+            if should_split and current_chunk:
+                segments.append(current_chunk)
+                current_chunk = []
+                chunk_start = w_start
+                
+            current_chunk.append(word)
+            
+            # 4. Batasi panjang teks total dalam satu chunk
+            chunk_text = " ".join([w.get('word', '') for w in current_chunk])
+            if len(chunk_text) > (max_chars * max_lines):
+                segments.append(current_chunk)
+                current_chunk = []
+                chunk_start = None
+                
+        if current_chunk:
+            segments.append(current_chunk)
+            
         return segments
 
     def format_timing(self, chunks):
