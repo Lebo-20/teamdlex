@@ -18,13 +18,30 @@ logging.basicConfig(
 API_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_IDS = [int(i) for i in os.getenv('ADMIN_IDS', '').split() if i]
 
+def get_progress_bar(percentage):
+    """Visual progress bar dengan emoji."""
+    filled = int(percentage // 10)
+    bar = "🟩" * filled + "⬜" * (10 - filled)
+    return f"[{bar}] {int(percentage)}%"
+
+def cleanup_temp():
+    """Hapus semua file sisa di folder temp."""
+    if os.path.exists('temp'):
+        for f in os.listdir('temp'):
+            try:
+                os.remove(os.path.join('temp', f))
+            except: pass
+
 # Pastikan folder temp ada
 os.makedirs('temp', exist_ok=True)
 
 class SubtitleBot:
     def __init__(self, token):
+        # Bersihkan temp saat startup
+        cleanup_temp()
+        
         self.application = ApplicationBuilder().token(token).build()
-        # Inisialisasi mesin subtitle profesional
+        # Inisialisasi sistem profesional
         self.extractor = ProfessionalSubtitleSystem()
         
         # Register handlers
@@ -37,12 +54,12 @@ class SubtitleBot:
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self.is_admin(update.effective_user.id):
-            await update.message.reply_text("⛔ Maaf, Anda tidak memiliki akses ke bot ini.")
+            await update.message.reply_text("⛔ Maaf, Anda tidak memiliki akses.")
             return
 
         await update.message.reply_text(
-            "👋 Halo Admin! Kirimkan video (Inggris/Mandarin) yang ingin diterjemahkan.\n"
-            "Saya akan mengekstrak hardsub/audio dan menghasilkan subtitle Dual-Language (Indo Formal)."
+            "👋 Halo Admin! Kirimkan video yang ingin diproses.\n"
+            "Bot akan menghasilkan subtitle Original & Indo Formal secara otomatis."
         )
 
     async def handle_video(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -51,87 +68,80 @@ class SubtitleBot:
 
         message = update.message
         video_file = message.video or message.document
-        
-        if not video_file:
-            return
+        if not video_file: return
             
         status_message = await message.reply_text("📥 Sedang mengunduh video...")
         
-        # Download video
-        file = await context.bot.get_file(video_file.file_id)
+        # Path manajemen
         video_path = f"temp/{video_file.file_id}.mp4"
-        await file.download_to_drive(video_path)
-        
-        await status_message.edit_text("⚙️ Sedang melakukan Transkripsi & Terjemahan... Ini butuh beberapa menit.")
+        srt_path_orig = f"temp/{video_file.file_id}_original.srt"
+        srt_path_trans = f"temp/{video_file.file_id}_id.srt"
         
         try:
-            # 1. Tentukan nama file output
-            srt_path_orig = f"temp/{video_file.file_id}_original.srt"
-            srt_path_trans = f"temp/{video_file.file_id}_id.srt"
+            # Download video
+            file = await context.bot.get_file(video_file.file_id)
+            await file.download_to_drive(video_path)
+            
+            await status_message.edit_text("⚙️ Inisialisasi Transkripsi & Terjemahan...")
             
             # Progress callback logic
             last_progress = [0]
             loop = asyncio.get_event_loop()
             
             def sync_progress_callback(percentage):
-                if int(percentage) // 10 > last_progress[0]:
-                    last_progress[0] = int(percentage) // 10
+                if int(percentage) // 5 > last_progress[0]:
+                    last_progress[0] = int(percentage) // 5
+                    bar = get_progress_bar(percentage)
                     asyncio.run_coroutine_threadsafe(
-                        status_message.edit_text(f"⚙️ Memproses... {int(percentage)}%"),
+                        status_message.edit_text(f"⚙️ Sedang Memproses...\n{bar}"),
                         loop
                     )
             
-            # 2. Ekstrak & Terjemahkan (V2)
+            # Ekstrak & Terjemahkan
             from functools import partial
-            # Returns: orig_subs, trans_subs, lang
             orig_subs, trans_subs, detected_lang = await loop.run_in_executor(
                 None, 
                 partial(self.extractor.process_full_subtitle, video_path, progress_callback=sync_progress_callback)
             )
             
             if not orig_subs:
-                await status_message.edit_text("⚠️ Tidak ditemukan teks/audio yang bisa diekstrak dari video ini.")
+                await status_message.edit_text("⚠️ Tidak ada transkripsi yang bisa dibuat.")
                 return
             
-            # 3. Simpan File (Original & Translated)
+            # Simpan File (Original & Translated)
             self.extractor.save_srt(orig_subs, srt_path_orig)
             self.extractor.save_srt(trans_subs, srt_path_trans)
             
-            # 4. Kirim File ke User
+            # Kirim File
             await status_message.edit_text(f"✅ Selesai! Mengirim hasil (Bahasa: {detected_lang})")
-            
-            # Kirim Original
-            await message.reply_document(
-                document=srt_path_orig,
-                filename=f"SUB_ORIGINAL_{video_file.file_id[:5]}.srt",
-                caption=f"📝 Subtitle Asli ({detected_lang})"
-            )
-            
-            # Kirim Terjemahan
-            await message.reply_document(
-                document=srt_path_trans,
-                filename=f"SUB_INDONESIA_{video_file.file_id[:5]}.srt",
-                caption="🇮🇩 Terjemahan Bahasa Indonesia (Formal)"
-            )
-            
-            # Hapus file SRT setelah dikirim
-            for p in [srt_path_orig, srt_path_trans]:
-                if os.path.exists(p): os.remove(p)
+            await message.reply_document(document=srt_path_orig, filename=f"SUB_ORIGINAL_{video_file.file_id[:5]}.srt")
+            await message.reply_document(document=srt_path_trans, filename=f"SUB_INDONESIA_{video_file.file_id[:5]}.srt")
             
         except Exception as e:
-            logging.error(f"Error processing video: {e}")
+            logging.error(f"Error: {e}")
             await status_message.edit_text(f"❌ Terjadi kesalahan: {str(e)}")
             
         finally:
-            if os.path.exists(video_path):
-                os.remove(video_path)
+            # PEMBERSIHAN TOTAL: Hapus semua file sementara saat selesai, gagal atau restart
+            for p in [video_path, srt_path_orig, srt_path_trans]:
+                if os.path.exists(p):
+                    try: os.remove(p)
+                    except: pass
+            
+            # Pastikan sisa audio wav juga terhapus
+            audio_wav = f"{video_path}.wav"
+            if os.path.exists(audio_wav):
+                try: os.remove(audio_wav)
+                except: pass
 
     async def update_bot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handler untuk perintah /update - Melakukan git pull dan restart."""
-        if not await self.is_admin(update.effective_user.id):
-            return
-
-        status_msg = await update.message.reply_text("🔄 Sedang memeriksa pembaruan di GitHub...")
+        """Handler untuk perintah /update."""
+        if not await self.is_admin(update.effective_user.id): return
+        
+        # Bersihkan temp sebelum restart
+        cleanup_temp()
+        
+        status_msg = await update.message.reply_text("🔄 Sedang mencari update di GitHub...")
         
         try:
             import subprocess
