@@ -29,7 +29,7 @@ class ProfessionalSubtitleSystem:
             self.whisper_model = whisperx.load_model("base", device)
         
         print("Loading PaddleOCR...")
-        self.ocr = PaddleOCR(use_angle_cls=True, lang='ch', show_log=False)
+        self.ocr = PaddleOCR(use_angle_cls=True, lang='ch')
         self.translator = GoogleTranslator(source='auto', target='id')
         self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
