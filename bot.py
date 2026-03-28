@@ -65,44 +65,58 @@ class SubtitleBot:
         await status_message.edit_text("⚙️ Sedang melakukan Transkripsi & Terjemahan... Ini butuh beberapa menit.")
         
         try:
-            srt_path = f"temp/{video_file.file_id}_id.srt"
+            # 1. Tentukan nama file output
+            srt_path_orig = f"temp/{video_file.file_id}_original.srt"
+            srt_path_trans = f"temp/{video_file.file_id}_id.srt"
             
             # Progress callback logic
             last_progress = [0]
             loop = asyncio.get_event_loop()
             
             def sync_progress_callback(percentage):
-                if percentage - last_progress[0] >= 10:
-                    last_progress[0] = percentage
+                if int(percentage) // 10 > last_progress[0]:
+                    last_progress[0] = int(percentage) // 10
                     asyncio.run_coroutine_threadsafe(
                         status_message.edit_text(f"⚙️ Memproses... {int(percentage)}%"),
                         loop
                     )
             
-            # Ekstrak & Terjemahkan
+            # 2. Ekstrak & Terjemahkan (V2)
             from functools import partial
-            subtitles = await loop.run_in_executor(
+            # Returns: orig_subs, trans_subs, lang
+            orig_subs, trans_subs, detected_lang = await loop.run_in_executor(
                 None, 
-                partial(self.extractor.process_full_subtitle, video_path, dual_sub=True, progress_callback=sync_progress_callback)
+                partial(self.extractor.process_full_subtitle, video_path, progress_callback=sync_progress_callback)
             )
             
-            if not subtitles:
-                await status_message.edit_text("⚠️ Tidak ditemukan subtitle/audio yang terbaca.")
+            if not orig_subs:
+                await status_message.edit_text("⚠️ Tidak ditemukan teks/audio yang bisa diekstrak dari video ini.")
                 return
-                
-            self.extractor.save_srt(subtitles, srt_path)
             
-            # Kirim balik dokumen
-            await status_message.edit_text("✅ Selesai! Mengirim file Subtitle Dual-Sub...")
+            # 3. Simpan File (Original & Translated)
+            self.extractor.save_srt(orig_subs, srt_path_orig)
+            self.extractor.save_srt(trans_subs, srt_path_trans)
+            
+            # 4. Kirim File ke User
+            await status_message.edit_text(f"✅ Selesai! Mengirim hasil (Bahasa: {detected_lang})")
+            
+            # Kirim Original
             await message.reply_document(
-                document=srt_path,
-                filename=f"subtitle_{video_file.file_id[:5]}_ID.srt",
-                caption="Berikut file dual-subtitle (Original & Indo Formal)."
+                document=srt_path_orig,
+                filename=f"SUB_ORIGINAL_{video_file.file_id[:5]}.srt",
+                caption=f"📝 Subtitle Asli ({detected_lang})"
+            )
+            
+            # Kirim Terjemahan
+            await message.reply_document(
+                document=srt_path_trans,
+                filename=f"SUB_INDONESIA_{video_file.file_id[:5]}.srt",
+                caption="🇮🇩 Terjemahan Bahasa Indonesia (Formal)"
             )
             
             # Hapus file SRT setelah dikirim
-            if os.path.exists(srt_path):
-                os.remove(srt_path)
+            for p in [srt_path_orig, srt_path_trans]:
+                if os.path.exists(p): os.remove(p)
             
         except Exception as e:
             logging.error(f"Error processing video: {e}")
