@@ -36,8 +36,8 @@ class ProfessionalSubtitleSystem:
             print(f"⚠️ Whisper load failed: {e}")
             self.whisper_model = whisperx.load_model("base", device)
         
-        # Multilingual OCR
-        self.ocr = PaddleOCR(use_angle_cls=True, lang='ch')
+        # Multilingual OCR - Forced CPU & Stabilized for VPS
+        self.ocr = PaddleOCR(use_angle_cls=False, lang='ch', use_gpu=False)
         self.translator = GoogleTranslator(source='auto', target='id')
         self.clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
 
