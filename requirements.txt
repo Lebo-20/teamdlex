@@ -13,3 +13,4 @@ scipy
 ffmpeg-python
 python-dotenv
 deep-translator
+Pillow
