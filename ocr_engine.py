@@ -24,7 +24,8 @@ class ProfessionalSubtitleSystem:
         self.whisper_model = whisperx.load_model("medium", device, compute_type="float16" if device=="cuda" else "int8")
         
         print("Loading PaddleOCR...")
-        self.ocr = PaddleOCR(use_angle_cls=True, lang='ch', use_gpu=torch.cuda.is_available())
+        # Hilangkan use_gpu agar PaddleOCR mendeteksi perangkat secara otomatis (lebih kompatibel)
+        self.ocr = PaddleOCR(use_angle_cls=True, lang='ch')
         
         # Inisialisasi Translator: Multi-source -> Indonesian
         self.translator = GoogleTranslator(source='auto', target='id')
