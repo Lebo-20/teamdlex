@@ -29,6 +29,7 @@ class SubtitleBot:
         
         # Register handlers
         self.application.add_handler(CommandHandler("start", self.start))
+        self.application.add_handler(CommandHandler("update", self.update_bot))
         self.application.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, self.handle_video))
         
     async def is_admin(self, user_id):
@@ -110,6 +111,37 @@ class SubtitleBot:
         finally:
             if os.path.exists(video_path):
                 os.remove(video_path)
+
+    async def update_bot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handler untuk perintah /update - Melakukan git pull dan restart."""
+        if not await self.is_admin(update.effective_user.id):
+            return
+
+        status_msg = await update.message.reply_text("🔄 Sedang memeriksa pembaruan di GitHub...")
+        
+        try:
+            import subprocess
+            import sys
+            
+            # 1. Jalankan git pull
+            print("Menjalankan git pull...")
+            pull_result = subprocess.run(['git', 'pull', 'origin', 'main'], capture_output=True, text=True)
+            
+            if "Already up to date." in pull_result.stdout:
+                await status_msg.edit_text("✅ Bot sudah menggunakan versi terbaru (Up to date).")
+                return
+                
+            await status_msg.edit_text(f"📦 Pembaruan ditemukan!\n\n`{pull_result.stdout[:200]}`\n\n⚙️ Melakukan restart...")
+            
+            # 2. Restart Proses
+            # Ini akan mengakhiri proses saat ini dan menjalankan perintah python yang sama lagi
+            print("Melakukan restart sistem...")
+            args = [sys.executable] + sys.argv
+            os.execv(sys.executable, args)
+            
+        except Exception as e:
+            logging.error(f"Update failed: {e}")
+            await status_msg.edit_text(f"❌ Gagal melakukan update: {str(e)}")
 
     def run(self):
         self.application.run_polling()
