@@ -98,7 +98,7 @@ class ProfessionalSubtitleSystem:
             crop = frame[int(h_orig * 0.70):int(h_orig * 0.95), :]
             
             processed = self.preprocess_frame(crop, mode)
-            res = self.ocr.ocr(processed, cls=True)
+            res = self.ocr.ocr(processed)
             
             if res and res[0]:
                 text = " ".join([l[1][0] for l in res[0] if l[1][1] > 0.65])
