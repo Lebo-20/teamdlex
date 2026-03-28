@@ -40,6 +40,9 @@ def cleanup_temp():
 
 class SubtitleBot:
     def __init__(self, token):
+        # Pastikan folder temp ada
+        os.makedirs('temp', exist_ok=True)
+        # Bersihkan temp saat startup
         cleanup_temp()
         self.application = ApplicationBuilder().token(token).build()
         self.extractor = ProfessionalSubtitleSystem()
